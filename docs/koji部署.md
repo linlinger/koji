@@ -96,7 +96,7 @@ name_opt                = ca_default
 cert_opt                = ca_default
 default_days            = 3650
 default_crl_days        = 30
-default_md              = md5
+default_md              = sha256
 preserve                = no
 policy                  = policy_match
 
@@ -109,7 +109,7 @@ commonName              = supplied
 emailAddress            = optional
 
 [req]
-default_bits            = 1024
+default_bits            = 3072
 default_keyfile         = privkey.pem
 distinguished_name      = req_distinguished_name
 attributes              = req_attributes
@@ -161,8 +161,8 @@ basicConstraints                = CA:true
 [root@os1 koji]# touch index.txt
 [root@os1 koji]# echo 01 > serial
 [root@os1 koji]# caname=koji
-[root@os1 koji]# openssl genrsa -out private/${caname}_ca_cert.key 2048
-[root@os1 koji]# openssl req -config ssl.cnf -new -x509 -days 3650 -key private/${caname}_ca_cert.key -out ${caname}_ca_cert.crt -extensions v3_ca
+[root@os1 koji]# openssl genrsa -out private/${caname}_ca_cert.key 3072
+[root@os1 koji]# openssl req -config ssl.cnf -new -x509 -days 3650 -sha256 -key private/${caname}_ca_cert.key -out ${caname}_ca_cert.crt -extensions v3_ca
 #弹出询问直接回车就行(Common Name 填 koji)
 ```
 
@@ -174,7 +174,7 @@ basicConstraints                = CA:true
 caname=koji
 for user in kojira kojiweb kojihub kojibuilder1 kojibuilder2 kojibuilder3 ;
 do
-    openssl genrsa -out certs/${user}.key 2048
+    openssl genrsa -out certs/${user}.key 3072
     openssl req -config ssl.cnf -new -nodes -out certs/${user}.csr -key certs/${user}.key
     openssl ca -config ssl.cnf -keyfile private/${caname}_ca_cert.key -cert ${caname}_ca_cert.crt -out certs/${user}.crt -outdir certs -infiles certs/${user}.csr
     cat certs/${user}.crt certs/${user}.key > ${user}.pem
@@ -188,7 +188,7 @@ done
 caname=koji
 for user in kojiadmin kojiuser ;
 do
-    openssl genrsa -out certs/${user}.key 2048
+    openssl genrsa -out certs/${user}.key 3072
     openssl req -config ssl.cnf -new -nodes -out certs/${user}.csr -key certs/${user}.key
     openssl ca -config ssl.cnf -keyfile private/${caname}_ca_cert.key -cert ${caname}_ca_cert.crt -out certs/${user}.crt -outdir certs -infiles certs/${user}.csr
     cat certs/${user}.crt certs/${user}.key > ${user}.pem
@@ -200,7 +200,7 @@ done
 ### koji Server 端相关准备（创建用户、准备证书、配置Koji命令行程序、配置Postgresql数据库）
 
 ```
-[root@os1 ~]# yum install pyOpenSSL python-krbV mod_wsgi postgresql-python mod_auth_kerb python-cheetah httpd mod_ssl postgresql-server koji koji-hub koji-web
+[root@os1 ~]# dnf install -y python3-pyOpenSSL python3-mod_wsgi postgresql-plpython3 python3-kerberos python3-cheetah python3-multilib httpd tmux openssl telnet ca-certificates mod_ssl postgresql-server koji koji-hub koji-hub-plugins koji-builder koji-builder-plugins koji-web koji-utils python3-koji-cli-plugins python3-koji-hub-plugins createrepo python3-mod_wsgi sqlite python3-librepo net-tools
 ```
 
 2.1 创建用户. 并为用户准备证书
@@ -228,6 +228,7 @@ server = http://192.168.33.61/kojihub
 weburl = http://192.168.33.61/koji
 topurl = http://192.168.33.61/kojifiles/
 topdir = /mnt/koji
+authtype = ssl
 cert = ~/.koji/client.crt
 ca = ~/.koji/clientca.crt
 serverca = ~/.koji/serverca.crt
@@ -436,6 +437,9 @@ KojiFilesURL = http://10.152.11.87/kojifiles
 WebCert = /etc/pki/koji/kojiweb.pem
 ClientCA = /etc/pki/koji/koji_ca_cert.crt
 KojiHubCA = /etc/pki/koji/koji_ca_cert.crt
+
+
+WebAuthType = ssl
 
 LoginTimeout = 72
 
