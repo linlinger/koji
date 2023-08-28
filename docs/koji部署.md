@@ -361,9 +361,9 @@ DBUser = koji
 KojiDir = /mnt/koji
 ...
 DNUsernameComponent = CN
-ProxyDNs = /C=CN /ST=BeiJing /L=Beijing /O=Linux /CN=koji /emailAddress=koji@163.com
+ProxyDNs = /C=CN /ST=Jiangsu /L=Nanjing /O=Qingsong /CN=koji /emailAddress=linyx@stp.net.cn
 ...
-KojiWebURL = http://10.152.11.87/koji
+KojiWebURL = http://kojihub/koji
 ```
 其中 ProxyDNs 和 kojiweb 认证文件的 DirName 字段一样。
 
@@ -425,8 +425,8 @@ SiteName = koji
 #KojiTheme = mytheme
 
 # Key urls
-KojiHubURL = http://10.152.11.87/kojihub
-KojiFilesURL = http://10.152.11.87/kojifiles
+KojiHubURL = http://192.168.1.30/kojihub
+KojiFilesURL = http://192.168.1.30/kojifiles
 
 # Kerberos authentication options
 # WebPrincipal = koji/web@EXAMPLE.COM
@@ -471,7 +471,7 @@ Kojira 用来创建和维护 Yum 库。需要注意：
 修改配置文件 /etc/kojira/kojira.conf
 
 ```
-server=http://10.1.81.87/kojihub
+server=http://kojihub/kojihub
 cert = /etc/pki/koji/kojira.pem
 ca = /etc/pki/koji/koji_ca_cert.crt
 serverca = /etc/pki/koji/koji_ca_cert.crt
