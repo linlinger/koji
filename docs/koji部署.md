@@ -512,3 +512,122 @@ serverca = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
 [kojiadmin@koji-server ~]$ koji add-user kojira
 [kojiadmin@koji-server ~]$ koji grant-permission repo kojira
 ```
+
+
+## Koji Builder 配置
+
+### 环境说明
+
+此处假设你完成了以上的所有设置，且你的builder和koji server 不为一台机。
+
+### 服务器端配置
+
+#### 发送证书
+```
+scp /etc/pki/koji/ca.stplinux.com_ca_cert.crt root@192.168.1.31:/etc/kojid/
+scp /etc/pki/koji/kojibuilder1.pem root@192.168.1.31:/etc/kojid/
+```
+#### 配置NFS共享
+```
+sudo yum install rpcbind nfs-utils
+```
+
+修改/etc/exports
+
+```
+/mnt/koji 192.168.1.31(ro,no_root_squash)
+```
+
+```
+systemctl enable rpcbind nfs-server --now
+```
+rpcbind起不来就重启
+
+### builder 环境设置
+安装必要工具
+
+```
+[kojibuilder1@kojibuilder1 ~]$ sudo yum install epel-release && /usr/bin/crb enable && sudo yum install koji-builder createrepo
+```
+
+同时记得在/etc/hosts目录内设置好相应的解析
+```
+192.168.1.30 koji.qslinux.com
+```
+### 配置kojid
+修改 /etc/kojid/kojid.conf
+```
+; kojihub地址
+server=http://koji.qslinux.com/kojihub
+; kojihub文件访问
+topurl=http://koji.qslinux.com/kojifiles
+;kojibuilder1证书配置
+cert = /etc/kojid/kojibuilder1.pem
+;koji服务器CA证书
+serverca = /etc/kojid/ca.stplinux.com_ca_cert.crt
+```
+
+### 设置NFS共享客户端
+```
+sudo yum install nfs-utils
+```
+
+新建 /etc/systemd/system/mnt-koji.mount
+```
+[Unit]
+Description=Koji NFS Mount
+After=network.target
+
+[Mount]
+What=koji.qslinux.com:/mnt/koji
+Where=/mnt/koji
+Type=nfs
+Options=defaults,ro
+
+[Install]
+WantedBy=multi-user.target
+```
+保存
+
+```
+systemctl daemon-reload
+systemctl enable mnt-koji.mount --now
+```
+
+请检查你客户端是否有/mnt/koji目录。
+此时执行 systemctl enable kojid --now 启动builder。
+
+
+
+## Koji 环境初始化配置
+此步骤用于初始化一个koji环境。为了之后能够顺利编译其他软件包
+
+### 服务器配置
+```
+#添加host，分配活儿
+su - kojiadmin
+koji add-host-to-channel kojibuilder1 createrepo
+koji add-host-to-channel kojibuilder1 image
+koji add-host-to-channel kojibuilder1 livecd
+koji add-host-to-channel kojibuilder1 livemedia
+koji add-tag qingsonglinux8.8-base
+koji add-tag qingsonglinux8.8-base-addon
+koji add-tag qingsonglinux8.8-base-addon-testing --parent=qingsonglinux8.8-base-addon
+koji add-tag qingsonglinux8.8-addons-build --parent=qingsonglinux8.8-base-addon --arches="x86_64"
+koji add-tag-inheritance --priority=1 qingsonglinux8.8-addons-build qingsonglinux8.8-base
+
+koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-baseos http://mirror.nju.edu.cn/rocky/8.8/BaseOS/\$arch/os/
+koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-devel http://mirror.nju.edu.cn/rocky/8.8/Devel/\$arch/os/
+koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-powertools http://mirror.nju.edu.cn/rocky/8.8/PowerTools/\$arch/os/
+koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-appsteam http://mirror.nju.edu.cn/rocky/8.8/AppStream/\$arch/os/
+
+koji add-group qingsonglinux8.8-addons-build build
+koji add-group qingsonglinux8.8-addons-build srpm-build
+
+koji add-group-pkg qingsonglinux8.8-addons-build   build    bash bzip2 coreutils cpio diffutils findutils gawk gcc gcc-c++ grep gzip info make patch redhat-rpm-config rocky-release rpm-build sed shadow-utils tar unzip util-linux which xz rpmdevtools  which xz ruby curl passwd
+koji add-group-pkg qingsonglinux8.8-addons-build   srpm-build    bash bzip2 coreutils cpio diffutils findutils gawk gcc gcc-c++ grep gzip info make patch redhat-rpm-config rocky-release rpm-build sed shadow-utils tar unzip util-linux which xz rpmdevtools  which xz ruby curl passwd
+
+koji add-target qingsonglinux8.8-addons qingsonglinux8.8-addons-build qingsonglinux8.8-base-addon-testing
+```
+
+
