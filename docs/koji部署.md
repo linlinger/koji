@@ -122,16 +122,16 @@ countryName_default             = CN
 countryName_min                 = 2
 countryName_max                 = 2
 stateOrProvinceName             = State or Province Name (full name)
-stateOrProvinceName_default     = Beijing
+stateOrProvinceName_default     = Jiangsu
 localityName                    = Locality Name (eg, city)
-localityName_default            = Beijing
+localityName_default            = Nanjing
 0.organizationName              = Organization Name (eg, company)
-0.organizationName_default      = Linux
+0.organizationName_default      = Qingsong
 organizationalUnitName          = Organizational Unit Name (eg, section)
 commonName                      = Common Name (eg, your name or your server\'s hostname)
 commonName_max                  = 64
 emailAddress                    = Email Address
-emailAddress_default            = koji@163.com
+emailAddress_default            = linyx@stp.net.cn
 emailAddress_max                = 64
 
 [req_attributes]
@@ -160,10 +160,11 @@ basicConstraints                = CA:true
 [root@os1 koji]# mkdir {certs,private}
 [root@os1 koji]# touch index.txt
 [root@os1 koji]# echo 01 > serial
-[root@os1 koji]# caname=koji
+[root@os1 koji]# caname=ca.stplinux.com
+[root@os1 koji]# dd if=/dev/urandom of=/etc/pki/koji/.rand bs=256 count=1
 [root@os1 koji]# openssl genrsa -out private/${caname}_ca_cert.key 3072
 [root@os1 koji]# openssl req -config ssl.cnf -new -x509 -days 3650 -sha256 -key private/${caname}_ca_cert.key -out ${caname}_ca_cert.crt -extensions v3_ca
-#弹出询问直接回车就行(Common Name 填 koji)
+#服务器证书的 Common Name（公用名）必须与颁发者的域不同。 例如，在本例中，颁发者的 CN 是ca.stplinux.com，服务器证书的 CN 是 koji.qslinux.com
 ```
 
 创建用户证书
@@ -171,31 +172,47 @@ basicConstraints                = CA:true
 创建koji各组件、koji-builder需要的证书
 
 ```
-caname=koji
-for user in kojira kojiweb kojihub kojibuilder1 kojibuilder2 kojibuilder3 ;
+caname=ca.stplinux.com
+for user in kojiweb kojihub kojira kojibuilder1 kojibuilder2 kojibuilder3 ;
 do
-    openssl genrsa -out certs/${user}.key 3072
+    echo "*****************************************************"
+    echo 
+    echo "      Setting up certificate for user ${user}        "
+    echo 
+    echo "*****************************************************"
+    openssl genrsa -out certs/${user}.key 2048
     openssl req -config ssl.cnf -new -nodes -out certs/${user}.csr -key certs/${user}.key
     openssl ca -config ssl.cnf -keyfile private/${caname}_ca_cert.key -cert ${caname}_ca_cert.crt -out certs/${user}.crt -outdir certs -infiles certs/${user}.csr
     cat certs/${user}.crt certs/${user}.key > ${user}.pem
 done
 ```
 
-注意： Common Name字段依次输入kojira、kojiweb、kojihub、kojibuilder1、kojibuilder2、kojibuilder3. [y/n]选y. 其它直接回车
+注意：当kojihub和kojiweb安装在同一台机器上时设置为同一个 Common Name. 别的Common Name 写用户名，比如 kojira,kojid [y/n]选y. 其它直接回车
 
 创建koji管理员和koji提交者需要的证书
 ```
-caname=koji
+caname=ca.stplinux.com
 for user in kojiadmin kojiuser ;
 do
+    echo "*****************************************************"
+    echo 
+    echo "      Setting up certificate for koji user ${user}        "
+    echo 
+    echo "*****************************************************"
     openssl genrsa -out certs/${user}.key 3072
     openssl req -config ssl.cnf -new -nodes -out certs/${user}.csr -key certs/${user}.key
     openssl ca -config ssl.cnf -keyfile private/${caname}_ca_cert.key -cert ${caname}_ca_cert.crt -out certs/${user}.crt -outdir certs -infiles certs/${user}.csr
     cat certs/${user}.crt certs/${user}.key > ${user}.pem
     openssl pkcs12 -export -inkey certs/${user}.key -in certs/${user}.crt -CAfile ${caname}_ca_cert.crt -out certs/${user}_browser_cert.p12
+    echo "*****************************************************"
+    echo 
+    echo "  Browser certificate for user ${user} is generated  "
+    echo "      at certs/${user}_browser_cert.p12"
+    echo 
+    echo "*****************************************************"
 done
 ```
-注意： Common Name字段依次输入kojiadmin、kojiuser
+注意： Common Name字段依次输入kojiadmin、kojiuser。此处的Common Name用于后续验证，因此要写用户名
 
 ### koji Server 端相关准备（创建用户、准备证书、配置Koji命令行程序、配置Postgresql数据库）
 
@@ -211,8 +228,8 @@ done
 [root@os1 ~]# su - kojiadmin
 [kojiadmin@os1 ~]# mkdir ~/.koji
 [kojiadmin@os1 ~]# cp -pv /etc/pki/koji/kojiadmin.pem ~/.koji/client.crt
-[kojiadmin@os1 ~]# cp -pv /etc/pki/koji/koji_ca_cert.crt ~/.koji/clientca.crt
-[kojiadmin@os1 ~]# cp -pv /etc/pki/koji/koji_ca_cert.crt ~/.koji/serverca.crt
+[kojiadmin@os1 ~]# cp -pv /etc/pki/koji/ca.stplinux.com_ca_cert.crt ~/.koji/clientca.crt
+[kojiadmin@os1 ~]# cp -pv /etc/pki/koji/ca.stplinux.com_ca_cert.crt ~/.koji/serverca.crt
 [kojiadmin@os1 ~]# exit
 ```
 
@@ -224,9 +241,9 @@ koji 命令行程序默认使用 /etc/koji.conf 配置文件. 但是每个用户
 
 ```
 [koji]
-server = http://192.168.33.61/kojihub
-weburl = http://192.168.33.61/koji
-topurl = http://192.168.33.61/kojifiles/
+server = http://koji.qslinux.com/kojihub
+weburl = http://koji.qslinux.com/koji
+topurl = http://koji.qslinux.com/kojifiles/
 topdir = /mnt/koji
 authtype = ssl
 cert = ~/.koji/client.crt
@@ -248,14 +265,13 @@ PostgreSQL Server 配置文件列表
 [root@os1 ~]# yum install postgresql-server
 [root@os1 ~]# useradd postgres
 [root@os1 ~]# service postgresql initdb
-[root@os1 ~]# service postgresql start
+[root@os1 ~]# systemctl enable postgresql --now
 ```
 
 创建系统 koji 用户并清空密码
 
 ```
-[root@os1 ~]# useradd koji
-[root@os1 ~]# passwd -d koji
+[root@os1 ~]# useradd koji && passwd -d koji
 ```
 
 在 PostgreSQL 中创建一个名为 koji 的帐号. 并初始化数据库
@@ -265,7 +281,7 @@ PostgreSQL Server 配置文件列表
 -bash-4.1$ createdb -O koji koji  #创建一个名为koji的数据库. 并由koji用户来管理. 删除用dropdb
 -bash-4.1$ exit
 [root@os1 ~]# su - koji
-[koji@os1 ~]# psql koji koji < /usr/share/doc/koji-1.8.0/docs/schema.sql
+[koji@os1 ~]# psql koji koji < /usr/share/doc/koji*/docs/schema.sql
 [koji@os1 ~]# exit
 ```
 
@@ -297,7 +313,7 @@ host    all         all         ::1/128               trust
 在 PostgreSQL 数据库中添加系统管理员信息. 然后 kojiadmin 用户才可以调用 koji add-host 等命令
 ```
 [root@os1 ~]# su - koji
-[koji@os1 ~]# psql
+[koji@os1 ~]# psql 
 insert into users (name, password, status, usertype) values ('kojiadmin', '', 0, 0);
 select * from users;       # 找到kojiadmin的user id. 本例中user_id=1
 insert into user_perms (user_id, perm_id,creator_id) values (1, 1, 1);
@@ -307,7 +323,7 @@ select * from users;
 insert into user_perms (user_id, perm_id,creator_id) values (1, 1, 1);
 select * from user_perms;
 
-exit
+\q
 ```
 
 ### koji Server 端相关配置（KojiHub、Kojiweb）
@@ -363,7 +379,7 @@ KojiDir = /mnt/koji
 DNUsernameComponent = CN
 ProxyDNs = /C=CN /ST=Jiangsu /L=Nanjing /O=Qingsong /CN=koji /emailAddress=linyx@stp.net.cn
 ...
-KojiWebURL = http://kojihub/koji
+KojiWebURL = http://koji.qslinux.com/koji
 ```
 其中 ProxyDNs 和 kojiweb 认证文件的 DirName 字段一样。
 
@@ -372,8 +388,8 @@ KojiWebURL = http://kojihub/koji
 ```
 SSLCertificateFile /etc/pki/koji/certs/kojihub.crt
 SSLCertificateKeyFile /etc/pki/koji/certs/kojihub.key
-SSLCertificateChainFile /etc/pki/koji/koji_ca_cert.crt
-SSLCACertificateFile /etc/pki/koji/koji_ca_cert.crt
+SSLCertificateChainFile /etc/pki/koji/ca.stplinux.com_ca_cert.crt
+SSLCACertificateFile /etc/pki/koji/ca.stplinux.com_ca_cert.crt
 SSLVerifyClient require
 SSLVerifyDepth  10
 ```
@@ -395,17 +411,30 @@ MaxRequestsPerChild 100
 
 ###  Koji 文件系统设置
 在前面 kojihub.conf 文件的配置过程中. 我们设置 KojiDir 的路径为 /mnt/koji。
+
 ```
 [root@os1 ~]# mkdir /mnt/koji
 [root@os1 ~]# cd /mnt/koji
 [root@os1 ~]# mkdir {packages,repos,work,scratch}
 [root@os1 ~]# chown -R apache.apache *
-[root@os1 ~]# service httpd restart
 ```
+###  配置SELinux 使得apache可以读写 /mnt/koji
+```
+root@localhost$ setsebool -P allow_httpd_anon_write=1
+root@localhost$ semanage fcontext -a -t public_content_rw_t "/mnt/koji(/.*)?"
+root@localhost$ restorecon -r -v /mnt/koji
+[root@os1 ~]# systemctl enable httpd --now
+[root@os1 ~]# firewall-cmd --add-service https --permanent
+[root@os1 ~]# firewall-cmd --add-service http --permanent
+
+```
+
 kojihub 应该可以通过 koji 命令行程序访问了。如果上面配置正确. 用 kojiadmin 的认证权限可以创建用户和设置用户权限了：
 
 ```
 [root@os1 ~]# su - kojiadmin
+[kojiadmin@os ~]#  koji moshimoshi #//先测试连通性
+
 [kojiadmin@os ~]# koji add-user kojira  #// 正确返回：Added user kojira (n). 否则前面配置有问题. 解决后再继续！
 [kojiadmin@os ~]# koji grant-permission repo kojira
 ```
@@ -435,12 +464,9 @@ KojiFilesURL = http://192.168.1.30/kojifiles
 
 # SSL authentication options
 WebCert = /etc/pki/koji/kojiweb.pem
-ClientCA = /etc/pki/koji/koji_ca_cert.crt
-KojiHubCA = /etc/pki/koji/koji_ca_cert.crt
-
-
+ClientCA = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
+KojiHubCA = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
 WebAuthType = ssl
-
 LoginTimeout = 72
 
 # This must be changed and uncommented before deployment
@@ -473,8 +499,8 @@ Kojira 用来创建和维护 Yum 库。需要注意：
 ```
 server=http://kojihub/kojihub
 cert = /etc/pki/koji/kojira.pem
-ca = /etc/pki/koji/koji_ca_cert.crt
-serverca = /etc/pki/koji/koji_ca_cert.crt
+ca = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
+serverca = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
 [root@koji-server ~]$ service kojira start
 ```
 
