@@ -266,6 +266,7 @@ PostgreSQL Server 配置文件列表
 [root@os1 ~]# useradd postgres
 [root@os1 ~]# service postgresql initdb
 [root@os1 ~]# systemctl enable postgresql --now
+[root@os1 ~]# sudo systemctl enable --now koji-sweep-db.timer
 ```
 
 创建系统 koji 用户并清空密码
@@ -501,7 +502,7 @@ server=http://kojihub/kojihub
 cert = /etc/pki/koji/kojira.pem
 ca = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
 serverca = /etc/pki/koji/ca.stplinux.com_ca_cert.crt
-[root@koji-server ~]$ service kojira start
+[root@koji-server ~]$ systemctl enable kojira --now
 ```
 
 请检查文件/var/log/kojira/kojira.log 确保 kojira 已经成功启动了。
@@ -610,24 +611,26 @@ koji add-host-to-channel kojibuilder1 createrepo
 koji add-host-to-channel kojibuilder1 image
 koji add-host-to-channel kojibuilder1 livecd
 koji add-host-to-channel kojibuilder1 livemedia
-koji add-tag qingsonglinux8.8-base
-koji add-tag qingsonglinux8.8-base-addon
-koji add-tag qingsonglinux8.8-base-addon-testing --parent=qingsonglinux8.8-base-addon
-koji add-tag qingsonglinux8.8-addons-build --parent=qingsonglinux8.8-base-addon --arches="x86_64"
-koji add-tag-inheritance --priority=1 qingsonglinux8.8-addons-build qingsonglinux8.8-base
 
-koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-baseos http://mirror.nju.edu.cn/rocky/8.8/BaseOS/\$arch/os/
-koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-devel http://mirror.nju.edu.cn/rocky/8.8/Devel/\$arch/os/
-koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-powertools http://mirror.nju.edu.cn/rocky/8.8/PowerTools/\$arch/os/
-koji add-external-repo -t qingsonglinux8.8-base rockylinux8.8-appsteam http://mirror.nju.edu.cn/rocky/8.8/AppStream/\$arch/os/
+koji add-tag dist-qingsong8
+koji add-tag --parent dist-qingsong8 --arches=x86_64 -x mock.yum.module_hotfixes=1 dist-qingsong8-build
+koji add-target dist-qingsong8 dist-qingsong8-build dist-qingsong8
 
-koji add-group qingsonglinux8.8-addons-build build
-koji add-group qingsonglinux8.8-addons-build srpm-build
+koji add-group dist-qingsong8-build build
+koji add-group dist-qingsong8-build srpm-build
 
-koji add-group-pkg qingsonglinux8.8-addons-build   build    bash bzip2 coreutils cpio diffutils findutils gawk gcc gcc-c++ grep gzip info make patch redhat-rpm-config rocky-release rpm-build sed shadow-utils tar unzip util-linux which xz rpmdevtools  which xz ruby curl passwd
-koji add-group-pkg qingsonglinux8.8-addons-build   srpm-build    bash bzip2 coreutils cpio diffutils findutils gawk gcc gcc-c++ grep gzip info make patch redhat-rpm-config rocky-release rpm-build sed shadow-utils tar unzip util-linux which xz rpmdevtools  which xz ruby curl passwd
-
-koji add-target qingsonglinux8.8-addons qingsonglinux8.8-addons-build qingsonglinux8.8-base-addon-testing
+koji add-external-repo -m bare -t dist-qingsong8-build dist-rocky8-build-repo https://kojidev.rockylinux.org/kojifiles/repos/dist-rocky8-build/latest/x86_64/ 添加源
+koji add-group-pkg dist-qingsong8-build srpm-build bash buildsys-macros-el8 git redhat-rpm-config rocky-release rpm-build scl-utils-build shadow-utils srpmproc system-release
+koji add-group-pkg dist-qingsong8-build build  bash buildsys-macros-el8 bzip2 coreutils cpio diffutils findutils gawk gcc gcc-c++ git grep gzip info make module-build-macros patch redhat-rpm-config rocky-release rpm-build scl-utils-build sed shadow-utils srpmproc tar unzip util-linux which xz
+koji add-pkg --owner kojiadmin dist-qingsong8 bash binutils
+koji regen-repo dist-qingsong8-build
 ```
+### koji客户端配置
+
+修改/etc/mock/site-defaults.cfg,添加
+```
+config_opts['use_bootstrap_image'] = False
+```
+
 
 
